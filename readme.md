@@ -1,11 +1,14 @@
 A simple tool to extract and plot MMR over time data via the Game Coordinator API.
 
+![example plot](https://raw.githubusercontent.com/Lypheo/mmr_hist/e9a6fb6559806762e15b210ba80d2bb68f64f0a2/time_series.svg)
+
 #### Usage
 
 ```sh
 mmr_hist.exe <steam username> <steam password>
 ```
 (steam guard probably needs to be deactivated for the login to work)
+
 The tool will attempt to gradually fetch your entire match history in increments of 20 matches.
 Once finished, it will dump the retrieved data in a mmr_hist.csv file and draw a graph in a mmr_hist.svg file.
 Note that if you’re a degen with too many games on your account (or if you run the tool repeatedly),
