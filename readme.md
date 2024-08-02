@@ -1,3 +1,4 @@
+### MMR History
 A simple tool to extract and plot MMR over time data via the Game Coordinator API.
 
 ![example plot](https://raw.githubusercontent.com/Lypheo/mmr_hist/e9a6fb6559806762e15b210ba80d2bb68f64f0a2/time_series.svg)
