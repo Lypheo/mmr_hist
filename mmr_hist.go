@@ -7,6 +7,8 @@ import (
 	"image/color"
 	"log"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"git.sr.ht/~sbinet/epok"
@@ -76,12 +78,12 @@ type Tuple struct {
 func main() {
 	logger := logrus.New()
 	logger.Out = os.Stdout
-	logger.Level = logrus.WarnLevel
+	logger.Level = logrus.InfoLevel
 	logger.Formatter = &logrus.TextFormatter{
 		FullTimestamp: true,
 	}
 
-	if len(os.Args) != 3 {
+	if len(os.Args) < 3 {
 		logger.Error("Usage: mmr_hist <username> <password>")
 		return
 	}
@@ -93,39 +95,82 @@ func main() {
 	defer client.Disconnect()
 	defer d2.Close()
 	hello_done := make(chan struct{})
+	done := false
 
-event_loop:
+	loginDetails := steam.LogOnDetails{
+		Username:               os.Args[1],
+		Password:               os.Args[2],
+		ShouldRememberPassword: true, // doesnt seem to do anything?
+	}
+
 	for event := range client.Events() {
 		switch e := event.(type) {
+		case *steam.LogOnFailedEvent:
+			logger.Info("Loging on to Steam failed: ", e.Result)
+			fmt.Println("Enter your steam guard code: ")
+			var authcode string
+			fmt.Scanln(&authcode)
+			var method string
+			fmt.Println("Steam guard method (1 for email, 2 for mobile): ")
+			fmt.Scanln(&method)
+			if strings.Contains(method, "1") {
+				loginDetails.AuthCode = authcode
+			} else {
+				loginDetails.TwoFactorCode = authcode
+			}
+			client.Connect()
 		case *steam.ConnectedEvent:
 			logger.Info("Connected to Steam")
-			client.Auth.LogOn(&steam.LogOnDetails{
-				Username: os.Args[1],
-				Password: os.Args[2],
-			})
+			client.Auth.LogOn(&loginDetails)
 		case *steam.LoggedOnEvent:
 			logger.Info("Logged on to Steam")
 			go establishDotaHello(d2, hello_done, 60)
 		case *devents.ClientWelcomed:
 			logger.Info("Welcomed to Dota 2")
 			hello_done <- struct{}{}
-			break event_loop
+			// go plotMMR(d2, client, logger)
+			plotMMR(d2, client, logger)
+			done = true
+			d2.Close()
+			client.Disconnect()
 		case *steam.DisconnectedEvent:
-			logger.Info("Disconnected from Steam")
-			return
+			logger.Debug("Disconnected from Steam")
+			if done {
+				return
+			}
 		case steam.FatalErrorEvent:
 			logger.Errorf("Fatal error: %v", e)
 			return
+			// case steam.LoginKeyEvent:
+			// 	logger.Warn(e.LoginKey)
+			// 	logger.Warn("Received login key")
+			// case steam.MachineAuthUpdateEvent:
+			// 	logger.Warn(e.Hash)
+			// 	logger.Warn("Received machine auth update")
+			// default:
+			// logger.Warn(e)
 		}
 	}
+}
 
+func plotMMR(d2 *dota2.Dota2, client *steam.Client, logger *logrus.Logger) {
 	var mmr_hist []Tuple
 	var last_mid uint64 = 0
 
 	for {
 		details := protocol.CMsgDOTAGetPlayerMatchHistory{}
+
 		details.AccountId = new(uint32)
-		*details.AccountId = 115153581
+		steam3string := client.SteamId().ToSteam3()
+		steam3Parts := strings.Split(steam3string, ":")
+		steam3 := steam3Parts[len(steam3Parts)-1]
+		steam3 = steam3[:len(steam3)-1] // remove ']'
+		steam3int, err := strconv.ParseUint(steam3, 10, 32)
+		if err != nil {
+			log.Fatal("Failed to convert steam3 to uint32", err)
+		}
+		*details.AccountId = uint32(steam3int)
+
 		details.MatchesRequested = new(uint32)
 		*details.MatchesRequested = 20
 		if last_mid != 0 {
@@ -133,19 +178,24 @@ event_loop:
 			*details.StartAtMatchId = last_mid
 		}
 		hist, err := d2.GetPlayerMatchHistory(context.TODO(), &details)
-		logger.Println(hist.Matches)
 		if err != nil || len(hist.Matches) == 0 {
 			logrus.Println(err)
 			break
 		}
 		for _, match := range hist.Matches {
 			last_mid = *match.MatchId
+			if len(os.Args) >= 4 {
+				logger.Println(*match.RankChange)
+			}
 			if match.StartTime != nil && match.PreviousRank != nil && *match.PreviousRank != 0 {
 				mmr_hist = append([]Tuple{{*match.StartTime, *match.PreviousRank}}, mmr_hist...)
 			}
 		}
 		fmt.Printf("\rProgress: %d", len(mmr_hist))
 		time.Sleep(500 * time.Millisecond)
+		if len(os.Args) >= 4 {
+			return
+		}
 	}
 	if last_mid == 0 {
 		logrus.Println("Failed fetching matches")
