@@ -6,13 +6,15 @@ A simple tool to extract and plot MMR over time data via the Game Coordinator AP
 #### Usage
 
 ```sh
-mmr_hist.exe <steam username> <steam password>
+mmr_hist.exe <steam username> <steam password> [<max number of pages to fetch>]
 ```
-The tool will attempt to gradually fetch your entire match history in increments of 20 matches.
-Once finished, it will dump the retrieved data in a mmr_hist.csv file and draw a graph in a mmr_hist.svg file.
+By default, the tool will attempt to gradually fetch your entire match history in increments of 20 matches.
+Once finished, it will dump the retrieved data in a CSV file and draw a graph in an SVG file.
 Note that if you’re a degen with too many games on your account (or if you run the tool repeatedly),
 you might exceed the API endpoints’s rate limit (something like 500 requests I think),
 which will prevent you from loading any match histories (in the client as well) for about a day.
+
+Subsequent runs will reuse the dumped data and only fetch new matches.
 
 ##### How
 
