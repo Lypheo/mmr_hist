@@ -123,7 +123,7 @@ func main() {
 	}
 
 	if len(os.Args) < 3 {
-		logger.Error("Usage: mmr_hist <username> <password> <number of pages to fetch>")
+		logger.Error("Usage: mmr_hist <username> <password> [<max number of pages to fetch> <verbose?>]")
 		return
 	}
 
@@ -141,6 +141,9 @@ func main() {
 		Password:               os.Args[2],
 		ShouldRememberPassword: true, // doesnt seem to do anything?
 	}
+
+	// plotMMR(d2, client, logger)
+	// os.Exit(0)
 
 	for event := range client.Events() {
 		switch e := event.(type) {
@@ -235,7 +238,7 @@ outer:
 			details.StartAtMatchId = new(uint64)
 		}
 		for _, match := range hist.Matches {
-			if len(os.Args) >= 4 {
+			if len(os.Args) >= 5 && match.RankChange != nil {
 				logger.Println(*match.RankChange)
 			}
 			if match.StartTime != nil && match.PreviousRank != nil && match.MatchId != nil && *match.PreviousRank != 0 {
@@ -261,8 +264,6 @@ outer:
 	}
 	writeCSV(mmr_hist)
 
-	months := (mmr_hist[len(mmr_hist)-1].Date - mmr_hist[0].Date) / 2_592_000
-
 	pts := make(plotter.XYs, 0)
 	for _, tuple := range mmr_hist {
 		if tuple.MMR == 0 || tuple.Date == 0 {
@@ -279,12 +280,16 @@ outer:
 	p.Y.Label.Text = "MMR"
 	p.X.AutoRescale = true
 	cnv := epok.UTCUnixTimeConverter{}
+
 	p.Y.Tick.Marker = hplot.Ticks{N: 10}
+
+	months := (mmr_hist[len(mmr_hist)-1].Date - mmr_hist[0].Date) / 2_592_000
+	freq := max(int(months/12), 4)
 	p.X.Tick.Marker = epok.Ticks{
 		Ruler: epok.Rules{
 			Major: epok.Rule{
 				Freq:  epok.Monthly,
-				Range: epok.RangeFrom(1, 13, 2),
+				Range: epok.RangeFrom(1, 13, freq),
 			},
 		},
 		Format:    "2006-01",
@@ -303,7 +308,23 @@ outer:
 
 	p.Add(line, pnts, hplot.NewGrid())
 
-	if err := p.Save(vg.Length(months)/3*vg.Inch, vg.Length(months)*vg.Inch/16, "mmr_hist.svg"); err != nil {
+	var maxMMR, minMMR uint32
+	for _, tuple := range mmr_hist {
+		if tuple.MMR > maxMMR {
+			maxMMR = tuple.MMR
+		}
+		if tuple.MMR < minMMR || minMMR == 0 {
+			minMMR = tuple.MMR
+		}
+	}
+	fmt.Printf("Max MMR: %d\n", maxMMR)
+	fmt.Printf("Min MMR: %d\n", minMMR)
+
+	// width := max(1+vg.Length(months)*vg.Centimeter*1.5, 40*vg.Centimeter)
+	// height := max(2+vg.Length(maxMMR-minMMR)*vg.Centimeter/100, 4*vg.Centimeter)
+	width := 45 * vg.Centimeter
+	height := 20 * vg.Centimeter
+	if err := p.Save(width, height, "mmr_hist.svg"); err != nil {
 		logger.Panic(err)
 	}
 }
