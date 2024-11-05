@@ -1,3 +1,7 @@
+### Deprecated
+
+See https://github.com/Lypheo/ShowMMR.
+
 ### Dota 2 MMR History
 A simple tool to extract and plot MMR over time data via the Game Coordinator API.
 
